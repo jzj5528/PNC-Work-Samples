@@ -1,0 +1,217 @@
+
+---
+title: "Activity: Bird Species"
+author: "Jonathan Jackson"
+date: "2/24/2022"
+output: html_notebook
+---
+
+
+# Set Up
+
+```{r}
+# Load `tidyverse` and `dcData` packages
+
+library(tidyverse)
+library(dcData)
+library(mosaic)
+
+
+# Load the `OrdwayBirds` data set into your RStudio environment from the `dcData` package
+
+data(OrdwayBirds)
+
+
+# Show a few commands used to inspect the data set a few different ways
+
+view(OrdwayBirds)
+help(OrdwayBirds)
+summary(OrdwayBirds)
+```
+
+# Activity
+
+When you're finished with this activity, you will have a graph that shows what time of year various species appear at the Katherine Ordway Natural History Study Area in Inver Grove Heights, MN.
+
+### Step 0
+
+Before we begin, the book gives us some instructions to select a few key variables and clean up the date formatting.  Use the commands given in the book, but be sure to study the functions used so you know what is happening.  In this case, we select `SpeciesName`, `Month`, and `Day`. Then a `mutate()` command converts each variable to character, and then converts the resulting "character string" to a number.
+
+```{r}
+# Get the data table & clean up dates (see Data Computing eBook)
+
+OrdwayBirds <-
+  OrdwayBirds %>%
+  select( SpeciesName, Month, Day ) %>%
+  mutate( Month = as.numeric(as.character(Month)), 
+          Day = as.numeric(as.character(Day)))
+
+
+# Inspect resulting data
+
+OrdwayBirds
+```
+
+
+
+### Step 1
+
+
+
+
+```{r}
+# unique species in original data (including mis-spellings)
+
+OrdwayBirds %>%
+  summarise(uniqueSpecies = n_distinct(SpeciesName))
+
+# unique species in the clean list
+
+OrdwaySpeciesNames %>%
+  summarise(count = n_distinct(SpeciesNameCleaned))
+
+```
+275 is the # of unique species in the original data set. In the clean list, the count is now 109.
+
+
+### Step 2
+  
+
+
+
+```{r}
+# inspect OrdwaySpeciesNames
+summary(OrdwaySpeciesNames)
+
+# inner join
+Corrected <-
+  OrdwayBirds %>%
+  inner_join( OrdwaySpeciesNames ) %>% 
+  select( Species = SpeciesNameCleaned, Month, Day ) %>%
+  na.omit()
+
+
+
+
+# inspect the data after the join
+
+View(Corrected)
+summary(Corrected)
+```
+The first data table is OrdwaySpeciesNames. It contains two variables: `SpeciesName` and `SpeciesNameCleaned`. We will continue to use `SpeciesNameCleaned` for the remainder of this activity.
+
+The second data table is Corrected. It contains three variables: `Species`, `Month`, and `Day`. This table is a combination of the OrdwayBirds and the OrdwaySpeciesNames data tables. These two tables were joined together in order to correct the spelling errors of the species names in the OrdwayBirds data table.
+
+### Step 3
+
+We want to identify the top 5-6 bird species sighted at the Katherine Ordway Natural History Study Area.
+
+```{r}
+# count sightings by species in descending order
+
+sightingspecies <-
+  Corrected %>% 
+  group_by(Species) %>% 
+  summarise(count=n()) %>%
+  arrange(desc(count))
+
+sightingspecies
+
+# a hint on p.164 recommends displaying the top 10 species to choose our threshold
+
+numSightingsTop <-
+  Corrected %>%
+  group_by(Species) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  head(10)
+numSightingsTop
+
+# define a sightings threshold; produce a table with only birds belonging to major species
+
+Majors <-
+  Corrected %>%
+  group_by(Species) %>%
+  summarise(Count = n(), Major = FALSE) %>%
+  mutate(Major = ifelse(Count > 1000, TRUE, Major)) %>%
+  filter(Major == TRUE) %>%
+  arrange(desc(Count))
+  
+Majors
+
+
+```
+The first table uses two variables species and count and it represents the number of sightings by species. There are 108 species in the table.
+In the second table we wanted to get the top 10 sightings so there are only 10 species listed in the table.
+In the third table, a new variable, `Major`, is added which is a Boolean variable representing whether or not a species is considered Major. To be considered Major, a species must have been seen at least 1,000 times. By filtering for species that are Major, there are now only five species in the table.
+
+
+
+### Step 4
+
+We now want to produce a month-by-month count for each of the major species, and then construct a chart to tell the story of what time of year the various species appear.
+
+```{r}
+# prepare glyph-ready data table called `ByMonth`
+
+ByMonth <-
+  Corrected %>%
+  left_join(Majors) %>%
+  filter(Major == TRUE) %>%
+  group_by(Species, Month) %>%
+  summarise(Count = n())
+ByMonth
+
+```
+
+Now, using `mplot()` or  `esquisser()` in the console, we can configure a reasonable graph and choose "show expression" to get `ggplot2` that can be embedded in our report.
+
+
+
+```{r}
+# ggplot command
+gf_line(Count ~ Month, data = ByMonth) %>%
+  gf_facet_wrap(~ Species, ncol = 4) %>% 
+  gf_labs(title = "Bird Species and When They Appear", caption = "")
+```
+
+```
+
+According to the graph, we can answer the questions posed:
+
+##### 1. Which species are present year-round?  
+
+American Goldfinch, Black-Capped Chickadee, Slate-Colored Junco, and Tree Swallow
+
+##### 2. Which species are migratory, that is, primarily present in one or two seasons?
+Field Sparrows and Slate-Colored Juncos
+
+
+
+##### 3. What is the peak month for each major species? (bullet list)
+
+  1. American Goldfinch - October
+  2. Black-Capped Chickadee - November
+  3. Field Sparrow - May
+  4. Slate-Colored Junco - October
+  5. Tree Swallow - March
+
+
+##### 4. Which major species are seen in good numbers for at least 6 months of the year?
+Field Sparrow				
+Slate-colored Junco				
+Tree Swallow
+```
+
+```{r}
+goodNumber <-
+  ByMonth %>%
+  filter(Count > 100) %>%
+  summarise(numMonths = n()) %>%
+  filter(numMonths >= 6) %>%
+  select(Species)
+goodNumber
+
+```
+
+
